@@ -115,7 +115,6 @@ router.post('/csv', multerSingle, (req: any, res: express.Response) => {
     // Use hash key index
     const md = forge.md.sha256.create();
     md.update(randomKey);
-    // inputsArray.push({id: md.digest().toHex(), file: req.files[0].buffer.toString()}) // Use key hash as job identifier
     options.inputs = {id: md.digest().toHex(), file: req.files[0].buffer.toString()}
 
     queue
