@@ -1,6 +1,5 @@
 import multer from 'multer';
 import express from 'express';
-// import Bull from 'bull';
 import { Queue, Worker, Job } from 'bullmq';
 import forge from 'node-forge';
 import { Router } from 'express';
@@ -121,11 +120,11 @@ router.post('/csv', multerSingle, (req: any, res: express.Response) => {
       .add(md.digest().toHex(), {...options}, {
         jobId: md.digest().toHex()
       })
-    worker.on('completed', (jobResult: Job, result: any) => {
+    worker.on('completed', (job: Job, result: any) => {
       const encryptedResult = encryptFile(Buffer.from(JSON.stringify(result)), randomKey)
-      resultsArray.push({id: jobResult.id, result: encryptedResult})
+      resultsArray.push({id: job.id, result: encryptedResult})
       setTimeout(() => {
-        const jobIndex = resultsArray.findIndex(x => x.id === jobResult.id)
+        const jobIndex = resultsArray.findIndex(x => x.id === job.id)
         resultsArray.splice(jobIndex, 1)
       }, 3600000) // Delete results after 1 hour
     });
@@ -251,7 +250,7 @@ router.delete('/:format(csv|json)/:id?', async (req: any, res: express.Response)
           host: 'redis'
         }
       })
-      res.send({msg: `Job ${job.id} cancelled, ${req.params.id}`})
+      res.send({msg: `Job ${req.params.id} cancelled`})
     } else {
       res.send({msg: 'no job found'})
     }
