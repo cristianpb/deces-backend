@@ -1,6 +1,6 @@
 import multer from 'multer';
 import express from 'express';
-import Queue from 'bee-queue';
+import Bull from 'bull';
 import forge from 'node-forge';
 import { Router } from 'express';
 import { RequestInput } from '../models/requestInput';
@@ -17,12 +17,13 @@ const multerSingle = multer().any();
 
 const inputsArray: JobInput[]= []
 const resultsArray: JobResult[]= []
-const queue = new Queue('example',  {
+const queueBull = new Bull('bulk-queue',  {
   redis: {
     host: 'redis'
   }
 });
-queue.process(async (job: Queue.Job) => {
+
+queueBull.process(async (job: Bull.Job) => {
   const jobIndex = inputsArray.findIndex(x => x.id === job.id)
   const jobFile = inputsArray.splice(jobIndex, 1).pop()
   const rows: any = jobFile.file.split(/\s*\r?\n\r?\s*/).map((str: string) => str.split(job.data.sep)); // TODO: parse all the attachements
@@ -101,7 +102,7 @@ const processSequential = async (rows: any, job: any): Promise<any> => { // part
     } else {
       resultsSeq.push(temparray)
     }
-    job.reportProgress({rows: resultsSeq.length, percentage: resultsSeq.length / rows.length * 100})
+    job.progress({rows: resultsSeq.length, percentage: resultsSeq.length / rows.length * 100})
   }
   return resultsSeq
 };
@@ -181,7 +182,7 @@ const decryptFile = (encryptedData: forge.util.ByteStringBuffer, password: strin
  *                     id: 'abc'
  *                     msg: 'started'
  */
-router.post('/csv', multerSingle, async (req: any, res: express.Response) => {
+router.post('/csv', multerSingle, (req: any, res: express.Response) => {
   if (req.files && req.files.length > 0) {
     // Get parameters
     const options = {...req.body};
@@ -197,16 +198,18 @@ router.post('/csv', multerSingle, async (req: any, res: express.Response) => {
     const md = forge.md.sha256.create();
     md.update(randomKey);
     inputsArray.push({id: md.digest().toHex(), file: req.files[0].buffer.toString()}) // Use key hash as job identifier
-    const job = await queue
-      .createJob({...options})
-      .setId(md.digest().toHex())
-      // .reportProgress({rows: 0, percentage: 0}) TODO: add for bee-queue version 1.2.4
-      .save()
-    job.on('succeeded', (result: any) => {
+
+    const jobOptions = {
+      jobId: md.digest().toHex()
+    }
+
+    queueBull
+      .add({...options}, jobOptions)
+    queueBull.on('completed', (jobResult: Bull.Job, result: any) => {
       const encryptedResult = encryptFile(Buffer.from(JSON.stringify(result)), randomKey)
-      resultsArray.push({id: job.id, result: encryptedResult})
+      resultsArray.push({id: jobResult.id, result: encryptedResult})
       setTimeout(() => {
-        const jobIndex = resultsArray.findIndex(x => x.id === job.id)
+        const jobIndex = resultsArray.findIndex(x => x.id === jobResult.id)
         resultsArray.splice(jobIndex, 1)
       }, 3600000) // Delete results after 1 hour
     });
@@ -274,8 +277,9 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
   if (req.params.id) {
     const md = forge.md.sha256.create();
     md.update(req.params.id);
-    const job: Queue.Job|any = await queue.getJob(md.digest().toHex())
-    if (job && job.status === 'succeeded') {
+    const job = await queueBull.getJob(md.digest().toHex())
+    const jobState = await job.getState()
+    if (job && jobState === 'completed') {
       const jobResult = resultsArray.find(x => x.id === md.digest().toHex())
       if (jobResult == null) {
         res.send({msg: 'No results'})
@@ -310,7 +314,8 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
         }
       }
     } else if (job) {
-      res.send({status: job.status, id: req.params.id, progress: job.progress});
+      const jobProgress = await job.progress()
+      res.send({status: jobState, id: req.params.id, progress: jobProgress});
     } else {
       res.send({msg: 'job doesn\'t exists'});
     }
@@ -346,6 +351,6 @@ interface JobInput {
 }
 
 interface JobResult {
-  id: string;
+  id: string|number;
   result: forge.util.ByteStringBuffer;
 }
