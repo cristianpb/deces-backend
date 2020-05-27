@@ -1,13 +1,9 @@
 import multer from 'multer';
 import express from 'express';
-import Bull from 'bull';
+// import Bull from 'bull';
+import { Queue, Worker, Job } from 'bullmq';
 import forge from 'node-forge';
 import { Router } from 'express';
-import { RequestInput } from '../models/requestInput';
-import { buildRequest } from '../buildRequest';
-import { runBulkRequest } from '../runRequest';
-import { buildResultSingle, ResultRawES } from '../models/result';
-import { scoreResults } from '../score';
 
 const encryptionIv = forge.random.getBytesSync(16);
 const salt = forge.random.getBytesSync(128);
@@ -15,97 +11,19 @@ const salt = forge.random.getBytesSync(128);
 export const router = Router();
 const multerSingle = multer().any();
 
-const inputsArray: JobInput[]= []
 const resultsArray: JobResult[]= []
-const queueBull = new Bull('bulk-queue',  {
-  redis: {
+const queue = new Queue('bulk-queue',   {
+  connection: {
     host: 'redis'
   }
 });
 
-queueBull.process(async (job: Bull.Job) => {
-  const jobIndex = inputsArray.findIndex(x => x.id === job.id)
-  const jobFile = inputsArray.splice(jobIndex, 1).pop()
-  const rows: any = jobFile.file.split(/\s*\r?\n\r?\s*/).map((str: string) => str.split(job.data.sep)); // TODO: parse all the attachements
-  const validFields: string[] = ['q', 'firstName', 'lastName', 'sex', 'birthDate', 'birthCity', 'birthDepartment', 'birthCountry',
-  'birthGeoPoint', 'deathDate', 'deathCity', 'deathDepartment', 'deathCountry', 'deathGeoPoint', 'deathAge',
-  'size', 'fuzzy', 'block'];
-  const jsonFields: string[] = ['birthGeoPoint','deathGeoPoint','block']
-  const mapField: any = {};
-  validFields.map(key => mapField[job.data[key] || key] = key );
-  const header: any = {};
-  let nFields:any = 0;
-  rows.shift().forEach((key: string, idx: number) => {
-    header[idx] =  key;
-    nFields++;
-  });
-  let json = [{
-    metadata: {
-      mapping: mapField,
-      header: [...Array(nFields).keys()].map(idx => header[idx])
-    }
-  }];
-  json = json.concat(rows
-    .filter((row: string[]) => row.length === nFields)
-    .map((row: string[]) => {
-      const request: any = {
-        metadata: {
-          source: {}
-        }
-      }
-      row.forEach((value: string, idx: number) => {
-        if (mapField[header[idx]]) {
-          request[mapField[header[idx]]] = jsonFields.includes(header[idx]) ? JSON.parse(value) : value;
-        }
-        request.metadata.source[header[idx]] = value;
-      });
-      request.block = request.block
-                      ? request.block
-                      : job.data.block
-                        ? JSON.parse(job.data.block)
-                        : {
-                          scope: ['name', 'birthDate'],
-                          'minimum_match': 1
-                        };
-      return request;
-    }))
-  return processSequential(json, job)
-});
-
-const processSequential = async (rows: any, job: any): Promise<any> => { // partial fix until the next release of bee-queue
-  const resultsSeq = []
-  const chunk = Number(job.data.chunkSize);
-  let temparray: any;
-  let i;
-  let j;
-  for (i=0, j=rows.length; i<j; i+=chunk) {
-    temparray = rows.slice(i,i+chunk);
-    const bulkRequest = temparray.map((row: any) => { // TODO: type
-      const requestInput = new RequestInput(row.q, row.firstName, row.lastName, row.sex, row.birthDate, row.birthCity, row.birthDepartment, row.birthCountry, row.birthGeoPoint, row.deathDate, row.deathCity, row.deathDepartment, row.deathCountry, row.deathGeoPoint, row.deathAge, row.scroll, row.scrollId, row.size, row.page, row.fuzzy, row.sort, row.block);
-      return [JSON.stringify({index: "deces"}), JSON.stringify(buildRequest(requestInput))];
-    })
-    const msearchRequest = bulkRequest.map((x: any) => x.join('\n\r')).join('\n\r') + '\n';
-    const result = await runBulkRequest(msearchRequest);
-    if (result.data.responses.length > 0) {
-      result.data.responses.forEach((item: ResultRawES, idx: number) => {
-        if (item.hits.hits.length > 0) {
-          const scoredResults = scoreResults(temparray[idx], item.hits.hits.map(hit => buildResultSingle(hit)))
-          if (scoredResults && scoredResults.length > 0) {
-            resultsSeq.push({...temparray[idx], ...scoredResults[0]})
-          } else {
-            resultsSeq.push(temparray[idx])
-          }
-        } else {
-          resultsSeq.push(temparray[idx])
-        }
-      })
-    } else {
-      resultsSeq.push(temparray)
-    }
-    job.progress({rows: resultsSeq.length, percentage: resultsSeq.length / rows.length * 100})
+const processFile = `/deces-backend/dist/controllers/bulkProcess`;
+let worker = new Worker('bulk-queue', processFile, {
+  connection: {
+    host: 'redis'
   }
-  return resultsSeq
-};
+})
 
 const encryptFile = (nodeBuffer: Buffer, password: string): forge.util.ByteStringBuffer => {
   const encryptionKey = forge.pkcs5.pbkdf2(password, salt, 16, 16);
@@ -197,15 +115,14 @@ router.post('/csv', multerSingle, (req: any, res: express.Response) => {
     // Use hash key index
     const md = forge.md.sha256.create();
     md.update(randomKey);
-    inputsArray.push({id: md.digest().toHex(), file: req.files[0].buffer.toString()}) // Use key hash as job identifier
+    // inputsArray.push({id: md.digest().toHex(), file: req.files[0].buffer.toString()}) // Use key hash as job identifier
+    options.inputs = {id: md.digest().toHex(), file: req.files[0].buffer.toString()}
 
-    const jobOptions = {
-      jobId: md.digest().toHex()
-    }
-
-    queueBull
-      .add({...options}, jobOptions)
-    queueBull.on('completed', (jobResult: Bull.Job, result: any) => {
+    queue
+      .add(md.digest().toHex(), {...options}, {
+        jobId: md.digest().toHex()
+      })
+    worker.on('completed', (jobResult: Job, result: any) => {
       const encryptedResult = encryptFile(Buffer.from(JSON.stringify(result)), randomKey)
       resultsArray.push({id: jobResult.id, result: encryptedResult})
       setTimeout(() => {
@@ -277,7 +194,7 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
   if (req.params.id) {
     const md = forge.md.sha256.create();
     md.update(req.params.id);
-    const job = await queueBull.getJob(md.digest().toHex())
+    const job = await queue.getJob(md.digest().toHex())
     const jobState = await job.getState()
     if (job && jobState === 'completed') {
       const jobResult = resultsArray.find(x => x.id === md.digest().toHex())
@@ -314,10 +231,30 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
         }
       }
     } else if (job) {
-      const jobProgress = await job.progress()
-      res.send({status: jobState, id: req.params.id, progress: jobProgress});
+      res.send({status: jobState, id: req.params.id, progress: job.progress});
     } else {
       res.send({msg: 'job doesn\'t exists'});
+    }
+  } else {
+    res.send({msg: 'no job id'})
+  }
+});
+
+router.delete('/:format(csv|json)/:id?', async (req: any, res: express.Response) => {
+  if (req.params.id) {
+    const md = forge.md.sha256.create();
+    md.update(req.params.id);
+    const job = await queue.getJob(md.digest().toHex())
+    if (job) {
+      worker.close(true)
+      worker = new Worker('bulk-queue', processFile, {
+        connection: {
+          host: 'redis'
+        }
+      })
+      res.send({msg: `Job ${job.id} cancelled, ${req.params.id}`})
+    } else {
+      res.send({msg: 'no job found'})
     }
   } else {
     res.send({msg: 'no job id'})
@@ -344,11 +281,6 @@ export const resultsHeader = [
   'death.date', 'death.certificateId', 'death.age', 'death.location.city',
   'death.location.cityCode', 'death.location.departmentCode', 'death.location.country',
   'death.location.countryCode', 'death.location.latitude', 'death.location.longitude']
-
-interface JobInput {
-  id: string;
-  file: string;
-}
 
 interface JobResult {
   id: string|number;

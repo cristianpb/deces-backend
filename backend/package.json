@@ -10,7 +10,7 @@
     "build": "./node_modules/.bin/tsc --outDir dist",
     "start": "node .",
     "predev": "npm run lint && npm run tsoa",
-    "dev": "ts-node-dev --respawn -- src/index.ts",
+    "dev": "ts-node-dev --respawn --watch src/controllers/bulkProcess.ts -- src/index.ts ",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Cristian Brokate",
@@ -19,6 +19,7 @@
     "axios": "^0.19.2",
     "bee-queue": "^1.2.3",
     "bull": "^3.14.0",
+    "bullmq": "^1.8.9",
     "express": "^4.17.1",
     "js-levenshtein": "^1.1.6",
     "morgan": "^1.10.0",
