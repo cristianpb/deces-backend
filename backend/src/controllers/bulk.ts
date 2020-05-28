@@ -228,6 +228,8 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
           res.send({msg: 'Not available format'})
         }
       }
+    } else if (job && jobState === 'failed') {
+      res.send({status: jobState, id: req.params.id, msg: job.failedReason});
     } else if (job) {
       res.send({status: jobState, id: req.params.id, progress: job.progress});
     } else {
