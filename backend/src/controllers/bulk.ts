@@ -195,13 +195,14 @@ router.get('/:format(csv|json)/:id?', async (req: any, res: express.Response) =>
     const job = await queue.getJob(md.digest().toHex())
     const jobState = await job.getState()
     if (job && jobState === 'completed') {
-      const jobResult = resultsArray.find(x => x.id === md.digest().toHex())
+      const jobIndex = resultsArray.findIndex(x => x.id === md.digest().toHex())
+      const jobResult = resultsArray.slice(jobIndex, jobIndex + 1).pop()
       if (jobResult == null) {
         res.send({msg: 'No results'})
       } else {
         const clone = Object.assign( Object.create( Object.getPrototypeOf(jobResult.result)), jobResult.result) // Clone to avoid problems with shift and original object
         const initialCopy =  decryptFile(clone, req.params.id)
-        const decryptedResult = JSON.parse(initialCopy)
+        const decryptedResult = initialCopy ? JSON.parse(initialCopy) : null
         if (decryptedResult == null || decryptedResult.length === 0) {
           res.send({msg: 'Empty results'})
         } else if (req.params.format === 'json') {
