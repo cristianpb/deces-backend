@@ -55,7 +55,7 @@ const myProcessor = async (job: Job): Promise<any> => {
 
 }
 
-const processSequential = async (rows: any, job: Job): Promise<any> => {
+const processSequential = async (rows: any, job: any): Promise<any> => {
   const resultsSeq = []
   const chunk = Number(job.data.chunkSize);
   let temparray: any;
@@ -85,7 +85,8 @@ const processSequential = async (rows: any, job: Job): Promise<any> => {
     } else {
       resultsSeq.push(temparray)
     }
-    job.updateProgress({rows: resultsSeq.length, percentage: resultsSeq.length / rows.length * 100})
+    // should be job.updateProgress, but it seems to be a problem with that
+    job.progress({rows: resultsSeq.length, percentage: resultsSeq.length / rows.length * 100})
   }
   return resultsSeq
 };
