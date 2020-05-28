@@ -24,6 +24,17 @@ let worker = new Worker('bulk-queue', processFile, {
   }
 })
 
+let randomKey : string;
+worker.on('completed', (job: Job, result: any) => {
+  const encryptedResult = encryptFile(Buffer.from(JSON.stringify(result)), randomKey)
+  resultsArray.push({id: job.id, result: encryptedResult})
+  randomKey = null; // destroy key
+  setTimeout(() => {
+    const jobIndex = resultsArray.findIndex(x => x.id === job.id)
+    resultsArray.splice(jobIndex, 1)
+  }, 3600000) // Delete results after 1 hour
+});
+
 const encryptFile = (nodeBuffer: Buffer, password: string): forge.util.ByteStringBuffer => {
   const encryptionKey = forge.pkcs5.pbkdf2(password, salt, 16, 16);
   const cipher = forge.cipher.createCipher('AES-CBC', encryptionKey);
@@ -109,7 +120,7 @@ router.post('/csv', multerSingle, (req: any, res: express.Response) => {
 
     // Use random number as enctyption key
     const bytes = forge.random.getBytesSync(32);
-    const randomKey = forge.util.bytesToHex(bytes);
+    randomKey = forge.util.bytesToHex(bytes);
 
     // Use hash key index
     const md = forge.md.sha256.create();
@@ -120,14 +131,6 @@ router.post('/csv', multerSingle, (req: any, res: express.Response) => {
       .add(md.digest().toHex(), {...options}, {
         jobId: md.digest().toHex()
       })
-    worker.on('completed', (job: Job, result: any) => {
-      const encryptedResult = encryptFile(Buffer.from(JSON.stringify(result)), randomKey)
-      resultsArray.push({id: job.id, result: encryptedResult})
-      setTimeout(() => {
-        const jobIndex = resultsArray.findIndex(x => x.id === job.id)
-        resultsArray.splice(jobIndex, 1)
-      }, 3600000) // Delete results after 1 hour
-    });
     res.send({msg: 'started', id: randomKey});
   } else {
     res.send({msg: 'no files attached'});
