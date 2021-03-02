@@ -77,6 +77,12 @@ export interface Person {
       age: number;
       location: Location;
     };
+    links?: {
+      label?: string;
+      wikipedia?: string;
+      wikidata?: string;
+      wikimedia?: string;
+    };
   };
 
 export interface ScoreParams {
