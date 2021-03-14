@@ -18,17 +18,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v1
-      - name: 🐋 Build the master docker image
-        run: make backend-build-all
-        env:
-          NPM_VERBOSE: ""
-      - name: 👷 Make deploy local
-        run: make deploy-dependencies backend-dev-stop backend-stop
+      - name: 👷 Deploy local instance
+        run: make deploy-dependencies dev
         env:
           FILES_TO_PROCESS: deces-2020-m01.txt.gz
-      - name: 🚀 Start API
-        run: make backend-start-public
-      - name: install ngrok
+      - name: Install ngrok
         run: |
           wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
           unzip -qq ngrok-stable-linux-amd64.zip
