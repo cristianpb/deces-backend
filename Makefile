@@ -259,6 +259,21 @@ backend-start:
 		done ;\
 	echo -e "backend started in $$((BACKEND_TIMEOUT - timeout)) seconds"; exit $$ret
 
+backend-start-public:
+	@echo Start API in production mode
+	@export EXEC_ENV=production; export BACKEND_LOG_LEVEL=debug; \
+		${DC_BACKEND} run -p ${PORT}:8080 -d --rm --name deces-backend --use-aliases backend npm run start
+	@timeout=${BACKEND_TIMEOUT} ; ret=1 ;\
+		until [ "$$timeout" -le 0 -o "$$ret" -eq "0"  ] ; do\
+			(docker exec -i ${USE_TTY} `docker ps -l --format "{{.Names}}" --filter name=deces-backend` curl -s --fail -X GET http://localhost:${BACKEND_PORT}/deces/api/v1/version > /dev/null) ;\
+			ret=$$? ;\
+			if [ "$$ret" -ne "0" ] ; then\
+				echo -e "try still $$timeout seconds to start backend before timeout" ;\
+			fi ;\
+			((timeout--)); sleep 1 ;\
+		done ;\
+	echo -e "backend started in $$((BACKEND_TIMEOUT - timeout)) seconds"; exit $$ret
+
 backend-stop:
 	@echo docker-compose down backend for production ${VERSION}
 	@export EXEC_ENV=production; ${DC_BACKEND} down --remove-orphan

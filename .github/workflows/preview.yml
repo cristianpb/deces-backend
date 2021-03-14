@@ -1,0 +1,34 @@
+name: Preview
+
+on: 
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        default: 'warning'
+
+jobs:
+  build:
+    name: 🐳 Deploy docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: 🐋 Build the master docker image
+        run: make backend-build-all
+        env:
+          NPM_VERBOSE: ""
+      - name: 👷 Make deploy local
+        run: make deploy-dependencies
+        env:
+          FILES_TO_PROCESS: deces-2020-m01.txt.gz
+          STORAGE_ACCESS_KEY: ${{ secrets.aws_access_key_id }}
+          STORAGE_SECRET_KEY: ${{ secrets.aws_secret_access_key }}
+      - name: 🚀 Start API
+        run: make backend-start-public
+      - name: install ngrok
+        run: |
+          wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
+          unzip -qq ngrok-stable-linux-amd64.zip
+      - name: run ngrok
+        run: ./ngrok http 8080
