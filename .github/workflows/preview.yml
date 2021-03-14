@@ -23,7 +23,7 @@ jobs:
         env:
           NPM_VERBOSE: ""
       - name: 👷 Make deploy local
-        run: make deploy-dependencies
+        run: make deploy-dependencies backend-dev-stop backend-stop
         env:
           FILES_TO_PROCESS: deces-2020-m01.txt.gz
       - name: 🚀 Start API
