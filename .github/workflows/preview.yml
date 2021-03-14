@@ -21,7 +21,10 @@ jobs:
       - name: 🐋 Build the master docker image
         run: make backend-build-all
       - name: 👷 Deploy local instance
-        run: make deploy-dependencies dev
+        run: |
+          docker ps
+          echo "export PORT=8288" > artifacts
+          make deploy-dependencies backend-start-public
         env:
           FILES_TO_PROCESS: deces-2020-m01.txt.gz
       - name: Install ngrok
@@ -30,6 +33,6 @@ jobs:
           unzip -qq ngrok-stable-linux-amd64.zip
       - name: run ngrok
         run: |
-          ./ngrok http 8084 --log=stdout > ngrok.log &
+          ./ngrok http 8288 --log=stdout > ngrok.log &
           curl http://127.0.0.1:4040/api/tunnels
           timeout ${{ github.event.inputs.timeout }} tail -f ngrok.log
