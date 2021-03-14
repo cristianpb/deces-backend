@@ -18,6 +18,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v1
+      - name: 🐋 Build the master docker image
+        run: make backend-build-all
       - name: 👷 Deploy local instance
         run: make deploy-dependencies dev
         env:
@@ -27,4 +29,4 @@ jobs:
           wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
           unzip -qq ngrok-stable-linux-amd64.zip
       - name: run ngrok
-        run: timeout ${{ github.event.inputs.timeout }} ./ngrok tcp 8084
+        run: timeout ${{ github.event.inputs.timeout }} ./ngrok http 8084

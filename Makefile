@@ -339,6 +339,11 @@ backend-dev-test:
 
 dev: network backend-dev-stop ${WIKIDATA_LINKS} ${COMMUNES_JSON} backend-dev
 
+backend-build-dev:
+	export EXEC_ENV=development; ${DC_BACKEND} -f ${DC_FILE}-dev-backend.yml build backend
+
+dev-start: network ${WIKIDATA_LINKS} ${COMMUNES_JSON} backend-dev
+
 # download wikidata test data
 ${WIKIDATA_SRC}:
 	@echo "downloading wikidata set of died french people...";\
