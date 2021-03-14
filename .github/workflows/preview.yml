@@ -3,6 +3,10 @@ name: Preview
 on: 
   workflow_dispatch:
     inputs:
+      timeout:  
+        description: 'Challenge deployment timeout'
+        required: true
+        default: '1h'
       logLevel:
         description: 'Log level'
         default: 'warning'
@@ -31,4 +35,4 @@ jobs:
           wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
           unzip -qq ngrok-stable-linux-amd64.zip
       - name: run ngrok
-        run: ./ngrok http 8080
+        run: timeout ${{ github.event.inputs.timeout }} ./ngrok tcp 8084
