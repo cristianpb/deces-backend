@@ -29,4 +29,7 @@ jobs:
           wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip
           unzip -qq ngrok-stable-linux-amd64.zip
       - name: run ngrok
-        run: timeout ${{ github.event.inputs.timeout }} ./ngrok http 8084
+        run: |
+          ./ngrok http 8084 --log=stdout > ngrok.log &
+          curl http://127.0.0.1:4040/api/tunnels
+          timeout ${{ github.event.inputs.timeout }} tail -f ngrok.log
