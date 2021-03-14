@@ -26,8 +26,6 @@ jobs:
         run: make deploy-dependencies
         env:
           FILES_TO_PROCESS: deces-2020-m01.txt.gz
-          STORAGE_ACCESS_KEY: ${{ secrets.aws_access_key_id }}
-          STORAGE_SECRET_KEY: ${{ secrets.aws_secret_access_key }}
       - name: 🚀 Start API
         run: make backend-start-public
       - name: install ngrok
