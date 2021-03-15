@@ -21,11 +21,11 @@ jobs:
       - name: 🐋 Build the master docker image
         run: make backend-build-all
       - name: 👷 Deploy local instance
-        run: make deploy-dependencies backend-start-public
+        run: make deploy-local
         env:
           FILES_TO_PROCESS: deces-2020-m01.txt.gz
       - name: Launch ngrok
         run: |
-          docker run -d --net deces-backend --name ngrok wernight/ngrok ngrok http backend:8084
+          docker run -d --net deces-backend --name ngrok wernight/ngrok ngrok http backend:8080
           docker exec -i ${USE_TTY} ngrok curl http://127.0.0.1:4040/api/tunnels
           timeout ${{ github.event.inputs.timeout }} docker logs -f ngrok
